@@ -1,23 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-OpenMS diff-mask pipeline (all-in-one)
-=====================================
-规则（你确认的）：
-- 分组 ID / 保存前缀：group_id = parts[0] + "_" + parts[1]  (例如 openms_XXX)
-- 以 group_id 为单位把 t0/t1/diff 对齐，然后顺序执行：
-  Step1  : Top-percent 差异筛选（需要 t0/t1/diff）
-  Step2  : 受 diff 约束的膨胀（固定半径，seed=Step1 输出）
-  Step3  : 逐 slice 2D 小连通域清理（Step2 输出）
-  Step4  : 自适应 2D 膨胀（seed=Step3 输出，约束=diff）
-  Step5  : 逐 slice 2D 小连通域清理 + 填洞（Step4 输出）
-
-用法示例：
-python openms_pipeline.py --root_dir "D:\dataset\wmh\peizhun_make_mask\mnipeizhun\mni_brain\openms_mni_brain"
-
-依赖：
-pip install numpy nibabel scipy SimpleITK tqdm
-"""
-
 import os
 import argparse
 from collections import defaultdict
@@ -28,9 +9,8 @@ from scipy import ndimage
 import SimpleITK as sitk
 from tqdm import tqdm
 
-
 # =========================
-# 0) 文件名解析 / 分组
+# 0) Filename Parsing / Grouping
 # =========================
 def parse_group_id(fname: str) -> str | None:
     """openms_XXX_YYYY_0000.nii.gz -> openms_XXX"""
@@ -39,55 +19,37 @@ def parse_group_id(fname: str) -> str | None:
         return None
     return f"{parts[0]}_{parts[1]}"
 
-
 def list_nii(root_dir: str):
     return [
         f for f in os.listdir(root_dir)
         if f.lower().endswith((".nii", ".nii.gz"))
     ]
 
-
 def build_case_index(root_dir: str):
-    """
-    在 root_dir 下扫描并按 group_id 建索引：
-    - t0: 含 "0000" 且不含 "mask" 且不含 "diff"
-    - t1: 含 "0001" 且不含 "mask" 且不含 "diff"
-    - diff: 文件名包含 "diff"（你原脚本是 "diff.nii.gz" / "diff" 关键词）
-    """
     files = list_nii(root_dir)
     groups = defaultdict(dict)
-
     for f in files:
         gid = parse_group_id(f)
         if gid is None:
             continue
-
         fl = f.lower()
-
-        # diff（尽量稳健：包含 diff 且不是各种 grow mask）
-        # 如果你有更严格命名，比如固定 "diff.nii.gz"，可再收紧
         if "diff" in fl and ("mask_pseudo_new_grow" not in fl) and ("adaptive" not in fl):
-            # 更偏向真正 diff：含 diff 且不含 0000/0001 的也行
             groups[gid]["diff"] = f
             continue
-
-        # t0 / t1
         if ("0000" in fl) and ("mask" not in fl) and ("diff" not in fl):
             groups[gid]["t0"] = f
         elif ("0001" in fl) and ("mask" not in fl) and ("diff" not in fl):
             groups[gid]["t1"] = f
-
     return groups
-
-
+  
 # =========================
-# 1) Step1: top-percent 差异筛选
+# 1) Step1: Top-Percent Difference Filtering
 # =========================
 def robust_zscore(image: np.ndarray, mask: np.ndarray, p_low=0.2, p_high=99.8):
     img = image.copy()
     y = img[mask > 0]
     if y.size == 0:
-        raise ValueError("Mask 内无有效体素（brain mask 为空）")
+        raise ValueError("No valid voxels in mask (brain mask is empty)")
 
     lo = np.percentile(y, p_low)
     hi = np.percentile(y, p_high)
@@ -99,7 +61,6 @@ def robust_zscore(image: np.ndarray, mask: np.ndarray, p_low=0.2, p_high=99.8):
     sigma = img[mask > 0].std() + 1e-8
     return (img - mu) / sigma
 
-
 def step1_process_case_top_percent(
     img0_path: str,
     img1_path: str,
@@ -109,10 +70,6 @@ def step1_process_case_top_percent(
     min_cc_size: int = 10,
     min_cc_p90: float = 0.5,
 ):
-    """
-    输出：3D uint8 mask (0/1)，ref_nii 用于 affine/header
-    关键：逐 z-slice 做 2D 8联通连通域，在 diff_mask 内对 D=I1-I0 做 top-percent
-    """
     print(img0_path)
     img0_nii = nib.load(img0_path)
     img1_nii = nib.load(img1_path)
@@ -134,7 +91,7 @@ def step1_process_case_top_percent(
     output = np.zeros_like(diff_mask, dtype=np.uint8)
     output_all = np.zeros_like(diff_mask, dtype=np.uint8)
 
-    structure_2d = np.ones((3, 3), dtype=np.int8)  # 8 联通
+    structure_2d = np.ones((3, 3), dtype=np.int8) 
     z_slices = diff_mask.shape[2]
 
     total_cc = 0
@@ -152,17 +109,14 @@ def step1_process_case_top_percent(
 
         for cc_id in range(1, num_cc + 1):
             cc_mask_raw = (labeled_z == cc_id)
-
-            # 🔴 新增：对单个连通域做 2D 孔洞填充
             cc_mask = binary_fill_holes(cc_mask_raw)
-
             cc_size = int(cc_mask.sum())
 
-            # 规则1：体积过滤
+           # Rule 1: Volume Filtering
             if cc_size < min_cc_size:
                 continue
 
-            # ---------- 规则1.5：外接矩形覆盖率（shape filter） ----------
+            # ---------- Rule 1.5:shape filter----------
             ys, xs = np.where(cc_mask)
             y_min, y_max = ys.min(), ys.max()
             x_min, x_max = xs.min(), xs.max()
@@ -179,7 +133,7 @@ def step1_process_case_top_percent(
             if values.size == 0:
                 continue
 
-            # 规则2：整体变化强度
+            # Rule 2: Overall Change Intensity
             p90 = float(np.percentile(values, 90))
 
             if p90 <1 and fill_ratio < 0.5:
@@ -189,7 +143,6 @@ def step1_process_case_top_percent(
                 print(z,"p90 < min_cc_p90")
                 continue
 
-            # 🔴 修改点：保留整个连通域，而不是 top-percent 点
             output_all[:, :, z][cc_mask] = 1
 
             # top-percent
@@ -239,12 +192,7 @@ def run_step1(root_dir: str, out_dir: str, groups: dict,
 def remove_small_cc_per_slice_2d_seed(mask3d: sitk.Image,
                                       min_size=2,
                                       fully_connected=True) -> sitk.Image:
-    """
-    专用于 seed 的 2D 清理：
-    - 逐 slice
-    - 8 联通
-    - 连通域 < min_size 删除
-    """
+    # 2D Cleanup Specifically for Seed
     mask3d = sitk.Cast(mask3d > 0, sitk.sitkUInt8)
     size = list(mask3d.GetSize())  # (x, y, z)
 
@@ -252,7 +200,7 @@ def remove_small_cc_per_slice_2d_seed(mask3d: sitk.Image,
     extractor.SetSize([size[0], size[1], 0])
 
     cc_filter = sitk.ConnectedComponentImageFilter()
-    cc_filter.SetFullyConnected(bool(fully_connected))  # True = 8 联通
+    cc_filter.SetFullyConnected(bool(fully_connected))  
 
     relabel = sitk.RelabelComponentImageFilter()
     relabel.SetMinimumObjectSize(int(min_size))
@@ -274,19 +222,16 @@ def remove_small_cc_per_slice_2d_seed(mask3d: sitk.Image,
     return out3d
 
 # =========================
-# SITK 工具（Step2-5 共用）
+# SITK Utilities (Shared by Steps 2–5)
 # =========================
 def sitk_read_bin(path: str) -> sitk.Image:
     img = sitk.ReadImage(path)
     return sitk.Cast(img > 0, sitk.sitkUInt8)
-
-
 def sitk_voxel_sum(img: sitk.Image) -> int:
     return int(np.sum(sitk.GetArrayViewFromImage(img)))
 
-
 # =========================
-# 2) Step2: 受 diff 约束的固定半径膨胀（seed=Step1 输出）
+# # Step 2: Fixed-Radius Dilation Constrained by Diff
 # =========================
 def run_step2_fixed_grow(step1_dir: str, root_dir: str, out_dir: str, groups: dict,
                          radius=(1, 1, 0), max_iter=1):
@@ -310,10 +255,8 @@ def run_step2_fixed_grow(step1_dir: str, root_dir: str, out_dir: str, groups: di
         seed = sitk_read_bin(seed_path)
         diff = sitk_read_bin(diff_path)
 
-        # 空间一致
         seed.CopyInformation(diff)
 
-        # ===== Step1.5：2D 八连通，小于 3 的 seed 删除 =====
         seed = remove_small_cc_per_slice_2d_seed(
             seed,
             min_size=3,
@@ -343,9 +286,8 @@ def run_step2_fixed_grow(step1_dir: str, root_dir: str, out_dir: str, groups: di
         out_name = f"{gid}_mask_pseudo_new_grow.nii.gz"
         sitk.WriteImage(out, os.path.join(out_dir, out_name))
 
-
 # =========================
-# 3) Step3: 逐 slice 2D 小连通域清理
+# 3) Step 3: Slice-by-Slice 2D Small Connected Component Removal
 # =========================
 def remove_small_cc_per_slice_2d(mask3d: sitk.Image, min_size=5, fully_connected=True) -> sitk.Image:
     mask3d = sitk.Cast(mask3d > 0, sitk.sitkUInt8)
@@ -387,7 +329,7 @@ def run_step3_clean(step2_dir: str, out_dir: str, min_cc_size_2d=5, fully_connec
 
 
 # =========================
-# 4) Step4: 自适应 2D 膨胀（seed=Step3 输出，约束=diff）
+# 4)Step 4: Adaptive 2D Dilation (Seed = Step 3 Output, Constraint = Diff)
 # =========================
 def max_iter_from_size(v: int) -> int:
     if v < 10:
@@ -437,7 +379,6 @@ def run_step4_adaptive_grow(step3_dir: str, root_dir: str, out_dir: str, groups:
             diff_np = sitk.GetArrayFromImage(diff)
             out_np  = np.zeros_like(seed_np, dtype=np.uint8)
 
-            # 逐 slice 自适应（2D CC 粒度）
             for z in range(seed_np.shape[0]):
                 seed_z = seed_np[z]
                 diff_z = diff_np[z]
@@ -485,7 +426,7 @@ def run_step4_adaptive_grow(step3_dir: str, root_dir: str, out_dir: str, groups:
 
 
 # =========================
-# 5) Step5: 2D 清理 + 填洞（最终）
+# 5)  Step 5: 2D Cleanup + Hole Filling (Final)
 # =========================
 def remove_small_cc_and_fill_holes_2d(mask3d: sitk.Image, min_size=10,
                                       fully_connected=True, fill_holes=True) -> sitk.Image:
@@ -540,7 +481,7 @@ def run_step5_final(step4_dir: str, out_dir: str,
 
 
 # =========================
-# Pipeline 入口：一键跑完
+# Pipeline 
 # =========================
 def run_openms_pipeline(
     root_dir: str,
@@ -565,8 +506,7 @@ def run_openms_pipeline(
     step5_fill_holes: bool = True,
 ):
     root_dir = os.path.abspath(root_dir)
-
-    # 中间目录（都在 root_dir 下，避免你复制来复制去）
+  
     step1_dir = os.path.join(root_dir, "step1_top5p")
     step2_dir = os.path.join(root_dir, "step2_fixed_grow")
     step3_dir = os.path.join(root_dir, "step3_clean2d")
@@ -638,7 +578,7 @@ def run_openms_pipeline(
 # =========================
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root_dir", required=True, help="包含 openms_* 的 nii/nii.gz 文件夹")
+    parser.add_argument("--root_dir", required=True)
     parser.add_argument("--top_percent", type=float, default=0.05)
     parser.add_argument("--min_cc_size", type=int, default=10)
     parser.add_argument("--min_cc_p90", type=float, default=0.5)
@@ -664,18 +604,4 @@ def main():
         step5_min_cc_2d=args.step5_min_cc_2d,
         step5_fill_holes=(not args.no_fill_holes)
     )
-
-
-if __name__ == "__main__":
-    #main()
-    run_openms_pipeline(
-        root_dir=r"D:\dataset\wmh\peizhun_make_mask\peizhun\try_make_dataset\LesSeg-20",
-        top_percent=0.2,
-        min_cc_size=5,
-        min_cc_p90=0.5,
-        fixed_max_iter=1,
-        step3_min_cc_2d=5,
-        adaptive_growth_thr=0.1,
-        step5_min_cc_2d=10,
-        step5_fill_holes="True"
-    )
+  
