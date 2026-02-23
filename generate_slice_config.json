@@ -1,0 +1,14 @@
+{
+  "task": "WMH",
+  "sites": ["openms"],
+  "dataset_path": "/home/sunyl/hdd/change-detection/change_detection/dataset/wmh_segmentation/final_dataset_select",
+  "output_path": "/home/sunyl/hdd/change-detection/change_detection/dataset/wmh_segmentation/training_slice/openms",
+  "single_axis": true,
+  "num_augments":10,
+  "label_sum": 0,
+  "new_slice_pos": 0.5,
+  "image_size": 512,
+  "seed": 8888
+}
+
+
