@@ -38,11 +38,9 @@ def normalization(image,type,size=512):
     if type == 'image':
         mask = image > 0
 
-        # 1) 全0或无有效区域：直接resize返回，避免percentile报错
         if not np.any(mask):
             return cv2.resize(image, (size, size), interpolation=cv2.INTER_LINEAR)
 
-        # 2) 仅在有效区域做分位数裁剪（拷贝避免改到上游视图）
         y = image[mask]
         lower = np.percentile(y, 0.2)
         upper = np.percentile(y, 99.8)
@@ -61,11 +59,11 @@ def normalization(image,type,size=512):
 
 def normalization_pair(image1, image2, size=512):
     """
-    对两张图像进行“联合归一化”：
-      1) 使用两张图像的联合有效区域 (image1>0 或 image2>0) 计算 0.2/99.8 分位数并统一裁剪；
-      2) 使用联合有效区域的整体均值/方差做 z-score（两张图用同一组 mu/std）；
-      3) 分别 resize 到 size×size。
-    返回：img1_norm, img2_norm
+Perform "joint normalization" on two images:
+  1) Use the combined valid region of both images (image1 > 0 OR image2 > 0) to compute the 0.2/99.8 percentiles and apply unified clipping;
+  2) Use the overall mean and standard deviation of the combined valid region to perform z-score normalization (both images use the same mu/std);
+  3) Resize each image to size × size.
+Return: img1_norm, img2_norm
     """
     img1 = image1.copy()
     img2 = image2.copy()
@@ -74,14 +72,12 @@ def normalization_pair(image1, image2, size=512):
     mask2 = img2 > 0
     joint_mask = mask1 | mask2
 
-    # 若联合区域为空，直接各自resize返回
     if not np.any(joint_mask):
         return (
             cv2.resize(img1, (size, size), interpolation=cv2.INTER_LINEAR),
             cv2.resize(img2, (size, size), interpolation=cv2.INTER_LINEAR),
         )
 
-    # 1) 联合分位数裁剪
     y_joint = np.concatenate([img1[joint_mask], img2[joint_mask]]).astype(np.float32)
     lower = np.percentile(y_joint, 0.2)
     upper = np.percentile(y_joint, 99.8)
@@ -91,7 +87,7 @@ def normalization_pair(image1, image2, size=512):
     img2[mask2 & (img2 < lower)] = lower
     img2[mask2 & (img2 > upper)] = upper
 
-    # 2) 联合均值/方差做标准化（两张图用同一个 mu/std）
+    #mu/std
     mu = y_joint.mean()
     sigma = y_joint.std()
     sigma = sigma if sigma > 1e-8 else 1.0
@@ -110,24 +106,20 @@ class Whole_dataset(Dataset):
         super().__init__()
         self.data_paths=[]
         self.allowed_sites = {
-            'WMH': ['Center01', 'Center03', 'Center07', 'Center08', 'Singapore', 'Amsterdam1', 'Amsterdam2',
-                    'Amsterdam3', 'Utrecht','miccai21center01','miccai21center02','miccai21center03','miccai21animacenter01','miccai21animacenter02','miccai21animacenter03','trainingmiccai21','testingmiccai21','yuanshitrainingmiccai21','MB3T','MRC2','MRN1','MRN2','ISBI','yuanshiISBI','LesSeg','PediMS','openms'], 'Pros': ['HK', 'BIDMC', 'UCL', 'RUNMC', 'RUNMC1', 'BMC']}
+            'WMH': ['trainingmiccai21','testingmiccai21','LesSeg','PediMS','openms']}
         print('Whole dataset loading data...')
         print(
             'Loading data need 2 arguments, which are: data_path (absolute path to the folder contains all files in this dataset),site(define which part of data are needed to be read)')
-        assert task in ['WMH', 'Pros'], 'Task should be WMH or Pros or LA'
-        assert all(s in self.allowed_sites[task] for s in sites), 'site should be in Center_01,Center_03,Center_07,Center_08,Amsterdam2,Amsterdam3,Utrecht,Amsterdam1; found:{}'.format(sites)
-
+        assert task in ['WMH'], 'Task should be WMH'
+        
         if task == 'WMH':
             modality = 'flair'
-            all_files = set(os.listdir(dataset_path))  # 加速存在性判断
+            all_files = set(os.listdir(dataset_path))  
 
             for site in sites:
-                # 站点名两侧用“非字母数字”作边界，避免误匹配
                 site_pat = re.compile(r'(?:^|[^a-zA-Z0-9])' + re.escape(site) + r'(?:[^a-zA-Z0-9]|$)')
 
                 for file in all_files:
-                    # 只从 timepoints1 的 FLAIR 文件出发做三元组匹配
                     if not site_pat.search(file):
                         continue
                     if 'timepoints1' not in file:
@@ -135,47 +127,32 @@ class Whole_dataset(Dataset):
                     if modality not in file or not file.endswith('.nii.gz'):
                         continue
 
-                    # 图像1（t1）与图像2（t2）
                     img1_file = file
                     img2_file = file.replace('timepoints1', 'timepoints2')
 
                     if img2_file not in all_files:
-                        # 没有配到 timepoints2，跳过
                         continue
 
-                    # 构造 mask 文件名：把末尾的 (_timepoints1)?_{FLAIR}.nii.gz 换成 _mask.nii.gz（mask 不含 timepoints）
                     base_no_tail = re.sub(rf'([_-]?timepoints1)?[_-]?{re.escape(modality)}\.nii\.gz$', '', img1_file)
                     mask_file = base_no_tail + '_mask.nii.gz'
 
                     if mask_file not in all_files:
-                        # 兜底：若你的数据里 mask 仍保留了 timepoints1，就用简单替换（可按需删除）
                         alt_mask = img1_file.replace(modality, 'mask')
                         if alt_mask in all_files:
                             mask_file = alt_mask
                         else:
-                            continue  # 找不到 mask，跳过
+                            continue  #not find mask，skip
 
                     image_path1 = os.path.join(dataset_path, img1_file)
                     image_path2 = os.path.join(dataset_path, img2_file)
                     mask_path = os.path.join(dataset_path, mask_file)
 
-                    # id：保留你原先风格；也可改成去掉 timepoints/modality 的基名
                     self.data_paths.append({
                         'data_path1': image_path1,
                         'data_path2': image_path2,
                         'mask_path': mask_path,
                         'id': file
                     })
-
-
-        if task=='Pros':
-            for site in sites:
-                for file in os.listdir(dataset_path):
-                    if re.search(r'[^a-zA-Z0-9]' + re.escape(site) + r'[^a-zA-Z0-9]', file) and file.find('T2') != -1:
-                        image_path=os.path.join(dataset_path,file)
-                        mask_path=os.path.join(dataset_path,file.replace('T2','mask'))
-                        self.data_paths.append({'data_path': image_path, 'mask_path': mask_path, 'id': file})
-
 
     def __len__(self):
         return len(self.data_paths)
@@ -189,13 +166,11 @@ def post_process_training_mask(padded_image, original_size):
     :param original_size: A tuple (new_height, new_width) indicating the desired output size
     :return: A tensor of the resized images
     """
-    # 通过使用torch.nn.functional.interpolate进行插值，避免使用numpy和opencv，以保持梯度追踪
     result = F.interpolate(padded_image, size=original_size, mode='bilinear', align_corners=False)
     return result
 def post_process_mask(padded_image,original_size):
 
     '''
-
     :param padded_image: size (b,w,h)
     :param original_size: size(w~,h~)
     :param size: padded_size
@@ -207,7 +182,6 @@ def post_process_mask(padded_image,original_size):
     batchsize=padded_image.shape[0]
     unpadded_image=np.transpose(padded_image,(1,2,0))
     restored_image = cv2.resize(unpadded_image, (w, h), interpolation=cv2.INTER_LINEAR)
-
 
     if batchsize ==1:
         restored_image=np.expand_dims(restored_image,axis=0)
@@ -229,7 +203,6 @@ class slice_dataset(Dataset):
                     self.slices.append(data)
                     mask=data['mask']
                     print(mask[(mask != 0) & (mask != 1)]) if ((mask != 0) & (mask != 1)).any() else None
-
 
     def __len__(self):
         return len(self.slices)
@@ -258,18 +231,12 @@ class test_dataset(Dataset):
         image_data2 = sitk.GetArrayFromImage(image2)
 
         if self.single_axis is False:
-            axes_to_slice = [0, 1, 2]  # 默认对三个轴进行切片
+            axes_to_slice = [0, 1, 2]  
         else:
             axes_to_slice = [0]
-            #axes_to_slice = [np.argmin(image_data1.shape)]  # 只对分辨率最高的轴进行切片
-
-
-
-
+            
         slices_this_patient['affine'] = (nib.load(data['data_path1'])).affine
         slices_this_patient['brain_mask'] = (image_data1 != 0) & (image_data2 != 0)
-
-
         slices_this_patient['id'] = data['id']
         slices_this_patient['info'] = [image1.GetOrigin(), image1.GetSpacing(),image1.GetDirection()]
         slices_this_patient['mask'] = sitk.GetArrayFromImage(mask_image)
@@ -285,7 +252,6 @@ class test_dataset(Dataset):
         for axis in axes_to_slice:
             if axis==0:
                 for i in range(image_data1.shape[0]):
-
                     nonzero_mask = (image_data1 != 0) & (image_data2 != 0)  # bool mask, shape [B,1,H,W]
 
                     image_data1 = image_data1 * nonzero_mask
@@ -337,7 +303,7 @@ class test_dataloader:
         assert single_axis is not None, 'You should specify the axis to slice'
         assert model_name is not None, 'You should specify the model name'
         self.single_axis = single_axis
-        self.dataset = dataset_iterable          # 这里应该是 test_dataset(...) 产生的可迭代样本
+        self.dataset = dataset_iterable         
         self.model = model
         self.device = device
         self.max_batch_size = max_batch_size
@@ -350,15 +316,14 @@ class test_dataloader:
         model = self.model.to(self.device)
         try:
             with torch.no_grad():
-                if self.model_name in ("MySam_GEGlora", "USamDiff", "MySAM_GEGlora","simple_detection","UNet"):
+                if self.model_name in ("UNet"):
                     _ = model(in1, in2)
                 elif self.model_name in ("DAPSAM"):
                     _= model(in1, False, 512)
                 elif self.model_name in ("TriD"):
                     _ = model(in1, phase='train')
-
                 else:
-                    _ = model(in1)  # 单输入模型走旧逻辑
+                    _ = model(in1)  
             torch.cuda.empty_cache()
             return True
         except RuntimeError as e:
@@ -395,12 +360,11 @@ class test_dataloader:
             n = len(self.dataset)
             for idx in range(n):
                 try:
-                    data = self.dataset[idx]  # 显式索引，抓住真实异常
+                    data = self.dataset[idx]  
                 except Exception as e:
                     import traceback as tb
                     tb.print_exc()
-                    # 若只是想跳过坏样本继续，也可以 continue
-                    raise  # 这里先抛出，方便你定位根因
+                    raise  
 
                 if data is None:
                     print(f"[DBG] precompute: idx={idx} got None sample, skip")
@@ -411,8 +375,8 @@ class test_dataloader:
                     self.find_batch_size(data['cor_slices1'][0], data['cor_slices2'][0], axis='cor')
                 if data.get('axi_slices1') and data.get('axi_slices2'):
                     self.find_batch_size(data['axi_slices1'][0], data['axi_slices2'][0], axis='axi')
-                break  # 只用第一例估计
-
+                break  
+                
         except Exception as e:
             import traceback as tb
             print("[ERR] precompute_batch_sizes crashed:", repr(e))
@@ -423,7 +387,6 @@ class test_dataloader:
         if not self.cached_batch_sizes:
             self.precompute_batch_sizes()
 
-        # ===== 兜底：预估失败或缺键时，用 1 作为默认 batch size =====
         if not self.cached_batch_sizes:
             self.cached_batch_sizes = {'sag': 1, 'cor': 1, 'axi': 1}
         try:
@@ -438,7 +401,6 @@ class test_dataloader:
                 axi_loader1 = axi_loader2 = None
 
                 if self.single_axis:
-                    # 谁有切片就用谁；batch size 用缓存或兜底1
                     if data.get('sag_slices1') and data.get('sag_slices2'):
 
                         bs = self.cached_batch_sizes.get('sag', 1)
@@ -458,7 +420,6 @@ class test_dataloader:
                         print("[WARN] single_axis=True but no slices; skip sample id:", data.get('id'))
                         continue
                 else:
-                    # 三轴都给（若有）
                     if data.get('sag_slices1') and data.get('sag_slices2'):
                         bs = self.cached_batch_sizes.get('sag', 1)
                         sag_loader1 = DataLoader(data['sag_slices1'], batch_size=bs, shuffle=False)
@@ -501,67 +462,3 @@ class test_dataloader:
             print("[ERR] __iter__ crashed:", repr(e))
             tb.print_exc()
             raise
-
-    #原始的，上面的同名函数为了debug
-    # def __iter__(self):
-    #     if not self.cached_batch_sizes:
-    #         self.precompute_batch_sizes()
-    #
-    #     for data in self.dataset:
-    #         sag_loader1 = sag_loader2 = None
-    #         cor_loader1 = cor_loader2 = None
-    #         axi_loader1 = axi_loader2 = None
-    #
-    #         # 单轴 or 三轴
-    #         if self.single_axis:
-    #             # 只启用存在的第一个方向（按 sag→cor→axi 优先）
-    #             if data.get('sag_slices1')and data.get('sag_slices2'):
-    #                 print("test_dataloder里选了sag轴")
-    #                 bs = self.cached_batch_sizes['sag']
-    #                 sag_loader1 = DataLoader(data['sag_slices1'], batch_size=bs, shuffle=False)
-    #                 sag_loader2 = DataLoader(data['sag_slices2'], batch_size=bs, shuffle=False)
-    #             elif data.get('cor_slices1')and data.get('cor_slices2'):
-    #                 print("test_dataloder里选了cor轴")
-    #                 bs = self.cached_batch_sizes['cor']
-    #                 cor_loader1 = DataLoader(data['cor_slices1'], batch_size=bs, shuffle=False)
-    #                 cor_loader2 = DataLoader(data['cor_slices2'], batch_size=bs, shuffle=False)
-    #             elif data.get('axi_slices1') and data.get('axi_slices2'):
-    #                 print("test_dataloder里选了axi轴")
-    #                 bs = self.cached_batch_sizes['axi']
-    #                 axi_loader1 = DataLoader(data['axi_slices1'], batch_size=bs, shuffle=False)
-    #                 axi_loader2 = DataLoader(data['axi_slices2'], batch_size=bs, shuffle=False)
-    #         else:
-    #             # 三轴都给（若有）
-    #             if data.get('sag_slices1'):
-    #                 bs = self.cached_batch_sizes['sag']
-    #                 sag_loader1 = DataLoader(data['sag_slices1'], batch_size=bs, shuffle=False)
-    #                 sag_loader2 = DataLoader(data['sag_slices2'], batch_size=bs, shuffle=False)
-    #             if data.get('cor_slices1'):
-    #                 bs = self.cached_batch_sizes['cor']
-    #                 cor_loader1 = DataLoader(data['cor_slices1'], batch_size=bs, shuffle=False)
-    #                 cor_loader2 = DataLoader(data['cor_slices2'], batch_size=bs, shuffle=False)
-    #             if data.get('axi_slices1'):
-    #                 bs = self.cached_batch_sizes['axi']
-    #                 axi_loader1 = DataLoader(data['axi_slices1'], batch_size=bs, shuffle=False)
-    #                 axi_loader2 = DataLoader(data['axi_slices2'], batch_size=bs, shuffle=False)
-    #
-    #         yield {
-    #             # 原图尺寸/信息
-    #             'axi_ori_size': data.get('axi_size'),
-    #             'cor_ori_size': data.get('cor_size'),
-    #             'sag_ori_size': data.get('sag_size'),
-    #             'axi_len': len(data.get('axi_slices1', [])),
-    #             'sag_len': len(data.get('sag_slices1', [])),
-    #             'cor_len': len(data.get('cor_slices1', [])),
-    #             'id': data.get('id'),
-    #             'info': data.get('info'),
-    #             'mask': data.get('mask'),
-    #
-    #             # 成对 loader（t0/t1）
-    #             'sagittal_loader1': sag_loader1,
-    #             'sagittal_loader2': sag_loader2,
-    #             'coronal_loader1':  cor_loader1,
-    #             'coronal_loader2':  cor_loader2,
-    #             'axial_loader1':    axi_loader1,
-    #             'axial_loader2':    axi_loader2,
-    #         }
