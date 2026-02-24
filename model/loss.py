@@ -7,18 +7,12 @@ class DiceLoss(nn.Module):
         self.smooth = smooth
 
     def forward(self, preds, targets):
-        # 将预测结果应用 sigmoid 函数
-
-
-        # 展平张量
         preds = preds.reshape(-1)
         targets = targets.reshape(-1)
 
-        # 计算交集和并集
         intersection = (preds * targets).sum()
         dice = (2. * intersection + self.smooth) / (preds.sum() + targets.sum() + self.smooth)
 
-        # 返回 1 - Dice 系数作为损失
         return 1 - dice
 
 class BinaryFocalLossWithLogits(nn.Module):
@@ -35,7 +29,6 @@ class BinaryFocalLossWithLogits(nn.Module):
         focal = alpha_t * (1 - pt) ** self.gamma * bce
         return focal.mean()
 
-
 class FixedLoss(nn.Module):
     def __init__(self,alpha=0.2,beta=0.8):
         super(FixedLoss, self).__init__()
@@ -45,7 +38,6 @@ class FixedLoss(nn.Module):
         self.ce = nn.BCELoss()
         #self.focal=BinaryFocalLossWithLogits()
     def forward(self, preds, targets):
-        # 将预测结果应用 sigmoid 函数
         preds = torch.sigmoid(preds)
         return self.beta*self.dice(preds,targets)+self.alpha*self.ce(preds,targets),self.dice(preds,targets),self.ce(preds,targets)
 
@@ -54,64 +46,6 @@ class FixedLoss(nn.Module):
     #     focal_loss = self.focal(preds, targets)
     #     total = self.beta * dice_loss + self.alpha * focal_loss
     #     return total, dice_loss, focal_loss
-
-class RandConvLoss(nn.Module):
-    ##########syl加，以前没有
-    def __init__(self):
-        super().__init__()
-
-        self.segloss = FixedLoss()
-        self.eps = 1e-6
-    ###############
-    def _safe_prob(self, x):
-        return torch.clamp(x, self.eps, 1. - self.eps)
-
-    def forward(self, out1, mask, out2=None, out3=None):
-        seg_loss = self.segloss(out1, mask)
-
-        if out2 is None or out3 is None:
-            return seg_loss[0]
-
-        # sigmoid → prob
-        p1 = self._safe_prob(torch.sigmoid(out1))
-        p2 = self._safe_prob(torch.sigmoid(out2))
-        p3 = self._safe_prob(torch.sigmoid(out3))
-
-        # 如果是全背景 slice，直接跳过 consistency
-        if mask.sum() == 0:
-            inv_loss = torch.tensor(0., device=out1.device)
-        else:
-            # mixture 用 stop-grad，防止互相拖死
-            p_mix = ((p1 + p2 + p3) / 3.).detach()
-            p_mix = self._safe_prob(p_mix)
-
-            log_p_mix = torch.log(p_mix)
-
-            inv_loss = (
-                               F.kl_div(log_p_mix, p1, reduction='batchmean') +
-                               F.kl_div(log_p_mix, p2, reduction='batchmean') +
-                               F.kl_div(log_p_mix, p3, reduction='batchmean')
-                       ) / 3.
-
-        total_loss = seg_loss[0] + 0.0002 * inv_loss
-
-        return total_loss, seg_loss[1], seg_loss[2], 0.0002 * inv_loss
-    # def forward(self, out1,mask,out2=None,out3=None):
-    #
-    #     if out2 is not None and out3 is not None:
-    #         p_clean, p_aug1, p_aug2 = F.sigmoid(
-    #             out1), F.sigmoid(
-    #             out2), F.sigmoid(
-    #             out3)
-    #
-    #         p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-    #         inv_loss = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-    #                      F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-    #                      F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
-    #         seg_loss=self.segloss(out1,mask)
-    #         return seg_loss[0]+0.0002*inv_loss,seg_loss[1],seg_loss[2],0.0002*inv_loss
-    #     else:
-    #         return self.segloss(out1,mask)[0],
 
 class ASDGKLLoss(nn.Module):
     def __init__(self):
@@ -139,14 +73,6 @@ class ASDGPatchNCELoss(nn.Module):
         l_pos = l_pos.view(num_patches, 1)
 
         # neg logit
-
-        # Should the negatives from the other samples of a minibatch be utilized?
-        # In CUT and FastCUT, we found that it's best to only include negatives
-        # from the same image. Therefore, we set
-        # --nce_includes_all_negatives_from_minibatch as False
-        # However, for single-image translation, the minibatch consists of
-        # crops from the "same" high-resolution image.
-        # Therefore, we will include the negatives from the entire minibatch.
         batch_dim_for_bmm = batch_size
 
         # reshape features to batch size
@@ -165,8 +91,8 @@ class ASDGPatchNCELoss(nn.Module):
 
         loss = self.cross_entropy_loss(out, torch.zeros(out.size(0), dtype=torch.long,
                                                         device=feat_q.device))
-
         return loss
+        
 class ASDGLoss1(nn.Module):
     def __init__(self,):
         super().__init__()
@@ -203,10 +129,3 @@ def ASDGMI_loss(src, tgt, nets):
         total_nce_loss += loss.mean()
 
     return total_nce_loss / n_layers
-
-if __name__=='__main__':
-    d1=torch.ones((1,3,256,256))
-    d2=torch.ones((1,3,256,256))
-    l=RandConvLoss()
-
-    print(l(d1,d1,d1,d2))
