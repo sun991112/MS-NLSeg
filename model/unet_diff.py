@@ -3,7 +3,6 @@ import torch.nn.functional as F
 import torch.utils.data
 import torch
 
-
 class conv_block(nn.Module):
     """
     Convolution Block
@@ -45,11 +44,6 @@ class up_conv(nn.Module):
 
 
 class UNet(nn.Module):
-    """
-    UNet - Basic Implementation
-    Paper : https://arxiv.org/abs/1505.04597
-    """
-
     def __init__(self, in_ch=2, out_ch=1):
         super(UNet, self).__init__()
 
@@ -86,8 +80,8 @@ class UNet(nn.Module):
     def forward(self, x1,x2):
         #print(x1.shape,x2.shape)
 
-        x1_single = x1[:, 0:1, :, :]  # 保留维度，形状 [B, 1, H, W]
-        x2_single = x2[:, 0:1, :, :]  # 保留维度，形状 [B, 1, H, W]
+        x1_single = x1[:, 0:1, :, :]  
+        x2_single = x2[:, 0:1, :, :]  
         #x = torch.cat([x1_single,x2_single,  x1_single- x2_single], dim=1)
         x = torch.cat([x1_single, x2_single], dim=1)
 
@@ -141,3 +135,4 @@ if __name__ == '__main__':
     with torch.no_grad():
         out=net(data1,data2)
     print(out.shape)
+
