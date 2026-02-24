@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import functools
 import sys
-sys.path.append('/home/sunyl/hdd/change-detection/change_detection/model')
+sys.path.append('/home/model')
 from torch.autograd import Function
 from torch.nn import init
 #from model.unet import UNet
@@ -173,7 +173,6 @@ class PatchSampleF(nn.Module):
                 if patch_ids is not None:
                     patch_id = patch_ids[feat_id]
                 else:
-                    # torch.randperm produces cudaErrorIllegalAddress for newer versions of PyTorch. https://github.com/taesungp/contrastive-unpaired-translation/issues/83
                     #patch_id = torch.randperm(feat_reshape.shape[1], device=feats[0].device)
                     patch_id = np.random.permutation(feat_reshape.shape[1])
                     patch_id = patch_id[:int(min(num_patches, patch_id.shape[0]))]  # .to(patch_ids.device)
@@ -218,7 +217,6 @@ class Downsample(nn.Module):
             return F.conv2d(self.pad(inp), self.filt, stride=self.stride, groups=inp.shape[1])
 class ResnetGenerator(nn.Module):
     """Resnet-based generator that consists of Resnet blocks between a few downsampling/upsampling operations.
-    We adapt Torch code and idea from Justin Johnson's neural style transfer project(https://github.com/jcjohnson/fast-neural-style)
     """
 
     def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6, padding_type='reflect', no_antialias=False, no_antialias_up=False, opt=None):
@@ -438,3 +436,4 @@ if __name__ == '__main__':
     # opt_mi.step()
     predtccccc=model.test_forward(img)
     print(predtccccc.shape)
+
