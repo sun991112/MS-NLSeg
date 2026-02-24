@@ -18,12 +18,7 @@ class SaveMuVar():
 
 
 class EFDMix(nn.Module):
-    """EFDMix.
-
-    Reference:
-      Zhang et al. Exact Feature Distribution Matching for Arbitrary Style Transfer and Domain Generalization. CVPR 2022.
-    """
-
+   
     def __init__(self, p=0.5, alpha=0.1, eps=1e-6, mix="random"):
         """
         Args:
@@ -86,10 +81,6 @@ class EFDMix(nn.Module):
 
 
 class MixStyle(nn.Module):
-    """MixStyle.
-    Reference:
-      Zhou et al. Domain Generalization with MixStyle. ICLR 2021.
-    """
 
     def __init__(self, p=0.5, alpha=0.1, eps=1e-6, mix='random'):
         """
@@ -153,10 +144,6 @@ class MixStyle(nn.Module):
 
 
 class TriD(nn.Module):
-    """TriD.
-    Reference:
-      Chen et al. Treasure in Distribution: A Domain Randomization based Multi-Source Domain Generalization for 2D Medical Image Segmentation. MICCAI 2023.
-    """
     def __init__(self, p=0.5, eps=1e-6, alpha=0.1):
         """
         Args:
