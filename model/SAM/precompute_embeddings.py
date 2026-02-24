@@ -1,6 +1,4 @@
-"""
-code is from https://github.com/bowang-lab/MedSAM/blob/main/pre_MR.py.
-"""
+
 import numpy as np
 import SimpleITK as sitk
 import os
