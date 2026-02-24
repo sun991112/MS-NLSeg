@@ -38,20 +38,52 @@ Processed images and annotations are released under the `dataset/` directory (su
 
 ---
 
-## Citation
-11.	[6] Guarnera, Francesco, et al. "MSLesSeg: baseline and benchmarking of a new Multiple Sclerosis Lesion Segmentation dataset." Scientific Data 12.1 (2025): 920.
+## Experimental Benchmark
 
-13.	[8] Popa, Maria, Gabriela Adriana Vișa, and Ciprian Radu Șofariu. "PediMS: A pediatric multiple sclerosis lesion segmentation dataset." Scientific Data 12.1 (2025): 1184.
-	12.	[7] Lesjak, Žiga, et al. "Validation of white-matter lesion change detection methods on a novel publicly available MRI image database." Neuroinformatics 14.4 (2016): 403-420.
-通过论文中的an Automatic Annotation Generation (AAG) pipeline to generate reliable masks without additional manual effort.并且发布于dataset文件夹中。
-```bibtex
-@inproceedings{msnlseg2026,
-  title={MS-NLSeg: A Multi-Center Dataset and Benchmark for Multiple Sclerosis New Lesion Segmentation},
-  author={Anonymous},
-  booktitle={MICCAI},
-  year={2026}
-}
+
+### Training
+
+Model training is performed using `ssdg_train.py`. The general command structure is:
+
+```bash
+python ssdg_train.py \
+    --checkpoint_dir /path/to/checkpoints \
+    --exp_name <experiment_name> \
+    --task <task_name> \
+    --training_slice_path /path/to/training_slices \
+    --test_site <site_list> \
+    --gpu_ids <gpu_id> \
+    --raw_data_folder /path/to/dataset_root \
+    --model <model_name> \
+    --single_axis \
+    --seed <random_seed> \
+    --epochs <num_epochs> \
+    --augment \
+    --eval
 ```
+
+### Testing
+
+```bash
+python test.py
+```
+
+---
+
+
+## References
+
+[1] Guarnera, Francesco, et al. “MSLesSeg: Baseline and benchmarking of a new Multiple Sclerosis Lesion Segmentation dataset.” *Scientific Data*, vol. 12, no. 1, 2025, p. 920.
+
+[2] Lesjak, Žiga, et al. “Validation of white-matter lesion change detection methods on a novel publicly available MRI image database.” *Neuroinformatics*, vol. 14, no. 4, 2016, pp. 403–420.
+
+[3] Popa, Maria, Gabriela Adriana Vișa, and Ciprian Radu Șofariu. “PediMS: A pediatric multiple sclerosis lesion segmentation dataset.” *Scientific Data*, vol. 12, no. 1, 2025, p. 1184.
+
+---
+
+## Acknowledgement
+
+We sincerely acknowledge and thank the authors of the publicly available datasets used in this work. In particular, we are grateful to the contributors of the MSLesSeg dataset, the PediMS dataset, and the white-matter lesion database introduced by Lesjak et al. Their significant efforts in data collection, curation, validation, and public release have greatly facilitated research on multiple sclerosis lesion segmentation and lesion change detection. We deeply appreciate their commitment to open science and their valuable contributions to the neuroimaging community.
 
 ---
 
