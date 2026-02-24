@@ -10,7 +10,7 @@ class training_options():
         self.parser.add_argument('--site', type=str, default='Center_01', help='in this dataset, which site for training. Also part of the name of .nii.gz files')
         self.parser.add_argument('--model', type=str, default='UNet', help='model used for training')
         self.parser.add_argument('--exp_name', type=str,required=True, help='model and results are saved in checkpoint_dir/exp_name/')
-        self.parser.add_argument('--checkpoint_dir', type=str, default='/home/wy3atjlu/zhaozq/mount8t/subjects/multisite_medsam/checkpoints', help='absolute path to save the model and results')
+        self.parser.add_argument('--checkpoint_dir', type=str, default='/home/checkpoints', help='absolute path to save the model and results')
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
         self.parser.add_argument('--seed', type=int, default=10, help='fix the random seed')
         self.parser.add_argument('--lr', type=float, default=0.0001, help='learning rate')
@@ -22,10 +22,10 @@ class training_options():
         self.parser.add_argument('--loss_param_alpha', type=float, default=1, help='alpha for fixed loss, multiplied by focal')
         self.parser.add_argument('--loss_param_beta', type=float, default=1, help='beta for fixed loss, multiplied by dice')
         self.parser.add_argument('--early_stopping', type=int, default=200, help='early stopping epoch')
-        self.parser.add_argument('--task', type=str, default=None, help='which task to run: WMH, Pros, LA')
+        self.parser.add_argument('--task', type=str, default=None, help='which task to run: WMH')
         self.parser.add_argument('--single_axis',  action='store_true',help='Set True for single axis slicing')
         self.parser.add_argument('--augment', action='store_true', help='Set True for training slice augment slicing')
-        self.parser.add_argument('--test_site', nargs='+', default='RUNMC,RUNMC1,HK,BIDMC,UCL', help='for SsDG, define which sites for testing')
+        self.parser.add_argument('--test_site', nargs='+', default='trainingmiccai21', help='for SsDG, define which sites for testing')
         self.parser.add_argument('--eval', default=False ,action='store_true',help='Set eval mode for testing')
         self.parser.add_argument('--continue_training', default=False ,action='store_true',help='If true, continue training from checkpoint')
         self.parser.add_argument('--continue_checkpoint', type=str, help='path to checkpoint to continue training from')
@@ -35,4 +35,5 @@ class training_options():
         if not self.initialized:
             self.initialize()
             self.opt = self.parser.parse_args()
+
             return self.opt
