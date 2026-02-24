@@ -5,7 +5,7 @@
 
 ## Introduction
 
-This repository is for our **MICCAI 2026** paper:
+This repository is for our **MICCAI 2026** submission:
 
 > **MS-NLSeg: A Multi-Center Dataset and Benchmark for Multiple Sclerosis New Lesion Segmentation**
 
@@ -83,7 +83,7 @@ python test.py
 
 ## Acknowledgement
 
-We sincerely acknowledge and thank the authors of the publicly available datasets used in this work. In particular, we are grateful to the contributors of the MSLesSeg dataset, the PediMS dataset, and the white-matter lesion database introduced by Lesjak et al. Their significant efforts in data collection, curation, validation, and public release have greatly facilitated research on multiple sclerosis lesion segmentation and lesion change detection. We deeply appreciate their commitment to open science and their valuable contributions to the neuroimaging community.
+We sincerely acknowledge and thank the authors of the publicly available datasets used in this work. Their significant efforts in data collection, curation, validation, and public release have greatly facilitated research on multiple sclerosis new lesion segmentation.
 
 ---
 
