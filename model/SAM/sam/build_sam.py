@@ -257,7 +257,7 @@ def _build_sam(
 
 if __name__=='__main__':
     import numpy as np
-    desam = sam_model_registry['default'](checkpoint='/home/wy3atjlu/zhaozq/mount8t/subjects/multisite_medsam/model/DeSAM/desam/modeling/sam_vit_h_4b8939.pth')
+    desam = sam_model_registry['default'](checkpoint='/home/modeling/sam_vit_h_4b8939.pth')
     data=torch.randn((8,3,512,512))
     preds=desam([{'image':data,'boxes':torch.from_numpy(np.array([[0, 0,512, 512]]*data.shape[0])).float()}],False)
     for i in preds:
